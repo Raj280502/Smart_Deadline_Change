@@ -3,6 +3,12 @@ from dotenv import load_dotenv
 import os
 from storage.database import init_db
 from fastapi.middleware.cors import CORSMiddleware
+from storage.database import get_connection
+from integrations.ingestion import run_ingestion_once
+from storage.database import get_connection
+from orchestrator.graph import process_all_unprocessed
+from storage.database import get_connection
+from orchestrator.graph import process_message
 
 load_dotenv()
 init_db()
@@ -34,7 +40,6 @@ def health_check():
 @app.get("/changes")
 def list_changes():
     """View full change history with event names."""
-    from storage.database import get_connection
     conn = get_connection()
     rows = conn.execute("""
         SELECT ch.id, d.event_name, ch.field_changed,
@@ -49,7 +54,6 @@ def list_changes():
 @app.post("/ingest")
 def trigger_ingestion():
     """Manually trigger ingestion from all sources."""
-    from integrations.ingestion import run_ingestion_once
     total = run_ingestion_once()
     return {"new_messages_saved": total}
 
@@ -60,7 +64,6 @@ def list_messages(source: str = None, unprocessed_only: bool = False):
     Optional filters: ?source=gmail or ?source=telegram
                       ?unprocessed_only=true
     """
-    from storage.database import get_connection
     conn  = get_connection()
     query = "SELECT id, source, sender, subject, body, received_at, processed FROM raw_messages WHERE 1=1"
     params = []
@@ -83,16 +86,12 @@ def process_messages():
     the full LangGraph multi-agent pipeline.
     Replaces the old /classify endpoint.
     """
-    from orchestrator.graph import process_all_unprocessed
     result = process_all_unprocessed()
     return result
 
 @app.post("/process/single")
 def process_single(message_id: str):
     """Process one specific message through the graph."""
-    from storage.database import get_connection
-    from orchestrator.graph import process_message
-
     conn = get_connection()
     msg  = conn.execute(
         "SELECT id, source, sender, subject, body FROM raw_messages WHERE id = ?",
@@ -115,7 +114,6 @@ def process_single(message_id: str):
 @app.get("/deadlines")
 def list_deadlines():
     """View all extracted deadlines."""
-    from storage.database import get_connection
     conn  = get_connection()
     rows  = conn.execute("""
         SELECT id, event_name, deadline_date, deadline_time,
