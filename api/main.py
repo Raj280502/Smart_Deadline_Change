@@ -19,9 +19,18 @@ app = FastAPI(
     description="Proactive AI deadline monitoring system",
     version="0.3.0"
 )
+# Allow CORS from frontend and Render domains
+allowed_origins = [
+    "http://localhost:5173",           # Local Vite dev server
+    "http://localhost:3000",           # Local React dev server
+    os.getenv("FRONTEND_URL", ""),    # Custom frontend URL
+]
+# Filter out empty strings
+allowed_origins = [url for url in allowed_origins if url]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
