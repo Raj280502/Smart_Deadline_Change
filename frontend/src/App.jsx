@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 
-const API = "http://localhost:8000";
+// API URL - uses env variable in production, localhost in development
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 // ── Helpers ──────────────────────────────────────────────────
 function getRiskLevel(score) {

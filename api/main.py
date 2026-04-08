@@ -23,6 +23,7 @@ app = FastAPI(
 allowed_origins = [
     "http://localhost:5173",           # Local Vite dev server
     "http://localhost:3000",           # Local React dev server
+    "https://smart-deadline-change.vercel.app",  # Vercel frontend (update if needed)
     os.getenv("FRONTEND_URL", ""),    # Custom frontend URL
 ]
 # Filter out empty strings

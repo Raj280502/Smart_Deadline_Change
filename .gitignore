@@ -1,5 +1,7 @@
 ```
 .env
+.env.local
+.env.production.local
 venv/
 __pycache__/
 *.pyc
@@ -9,6 +11,7 @@ credentials.json
 smart_deadline.db
 chroma_db/
 node_modules/
+frontend/node_modules/
 frontend/dist/
 *.egg-info/
 .pytest_cache/
