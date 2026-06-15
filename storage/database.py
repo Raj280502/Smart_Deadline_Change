@@ -1,5 +1,4 @@
 import sqlite3
-import os
 
 # Database will be created as a file in the project root
 DB_PATH = "smart_deadline.db"
@@ -33,11 +32,11 @@ def init_db():
     """)
 
 
-    # Table 2: extracted deadlines (filled in Step 3)
+    # Table 2: extracted deadlines
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS deadlines (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            email_id      TEXT,            -- links back to raw_emails
+            message_id    TEXT,            -- links back to raw_messages
             event_name    TEXT,
             deadline_date TEXT,            -- ISO date
             deadline_time TEXT,
@@ -48,6 +47,21 @@ def init_db():
             source        TEXT
         )
     """)
+    ensure_column(cursor, "deadlines", "message_id", "TEXT")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS change_history (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            deadline_id    INTEGER,
+            field_changed  TEXT,
+            old_value      TEXT,
+            new_value      TEXT,
+            detected_at    TEXT,
+            source_message TEXT,
+            FOREIGN KEY(deadline_id) REFERENCES deadlines(id)
+        )
+    """)
+
     # Sender statistics for prediction agent
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sender_stats (
@@ -60,9 +74,76 @@ def init_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS placement_drives (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            portal_name      TEXT NOT NULL,
+            external_id      TEXT,
+            company_name     TEXT NOT NULL,
+            role             TEXT,
+            min_package      TEXT,
+            max_package      TEXT,
+            min_stipend      TEXT,
+            max_stipend      TEXT,
+            location         TEXT,
+            duration         TEXT,
+            criteria         TEXT,
+            eligible_branches TEXT,
+            deadline_date    TEXT,
+            deadline_time    TEXT,
+            job_description  TEXT,
+            jd_summary       TEXT,
+            document_url     TEXT,
+            local_document   TEXT,
+            apply_url        TEXT,
+            status           TEXT DEFAULT 'open',
+            source_hash      TEXT,
+            first_seen_at    TEXT,
+            last_seen_at     TEXT,
+            UNIQUE(portal_name, external_id)
+        )
+    """)
+    ensure_column(cursor, "placement_drives", "min_stipend", "TEXT")
+    ensure_column(cursor, "placement_drives", "max_stipend", "TEXT")
+    ensure_column(cursor, "placement_drives", "eligible_branches", "TEXT")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS placement_drive_changes (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            drive_id       INTEGER NOT NULL,
+            field_changed  TEXT NOT NULL,
+            old_value      TEXT,
+            new_value      TEXT,
+            detected_at    TEXT NOT NULL,
+            FOREIGN KEY(drive_id) REFERENCES placement_drives(id)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS placement_scrape_runs (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            portal_name           TEXT NOT NULL,
+            started_at            TEXT NOT NULL,
+            finished_at           TEXT,
+            status                TEXT NOT NULL,
+            new_drives_count      INTEGER DEFAULT 0,
+            changed_drives_count  INTEGER DEFAULT 0,
+            error_message         TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
     print("Database initialized successfully.")
+
+
+def ensure_column(cursor, table_name: str, column_name: str, column_type: str):
+    """Add a column when an older local SQLite database is missing it."""
+    columns = cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
+    if column_name not in [column[1] for column in columns]:
+        cursor.execute(
+            f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+        )
 
 # Run init when this file is imported
 if __name__ == "__main__":

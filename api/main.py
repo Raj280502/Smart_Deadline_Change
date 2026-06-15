@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from dotenv import load_dotenv
 import os
+import sys
+import asyncio
 from storage.database import init_db
 from fastapi.middleware.cors import CORSMiddleware
 from storage.database import get_connection
@@ -11,6 +13,8 @@ from storage.database import get_connection
 from orchestrator.graph import process_message
 
 load_dotenv()
+if sys.platform.startswith("win"):
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 init_db()
 
 
@@ -221,3 +225,46 @@ def clear_chat_history():
     from agents.chat_agent import clear_history
     clear_history()
     return {"status": "history cleared"}
+
+
+@app.post("/placements/sync")
+def sync_placements(send_notifications: bool = True):
+    """
+    Login to the active TPO portal adapter, detect placement drives,
+    read JD documents, summarize them, store them, and notify Telegram.
+    """
+    from integrations.placement_scraper import sync_placement_drives
+    return sync_placement_drives(send_notifications=send_notifications)
+
+
+@app.get("/placements")
+def list_placements(limit: int = 100):
+    """List placement drives detected from the TPO portal."""
+    from storage.placement_repository import list_placement_drives
+    return {"placements": list_placement_drives(limit=limit)}
+
+
+@app.get("/placements/changes")
+def list_placement_drive_changes(limit: int = 100):
+    """List changes detected in placement drive data."""
+    from storage.placement_repository import list_placement_changes
+    return {"changes": list_placement_changes(limit=limit)}
+
+
+@app.post("/placements/test-login")
+def test_placement_login():
+    """Verify that the active placement portal adapter can log in."""
+    from integrations.placement_portals.registry import get_active_adapter
+
+    adapter = get_active_adapter()
+    try:
+        success = adapter.login()
+        return {"portal_name": adapter.portal_name, "login_success": success}
+    except Exception as exc:
+        return {
+            "portal_name": adapter.portal_name,
+            "login_success": False,
+            "error": str(exc),
+        }
+    finally:
+        adapter.close()
