@@ -114,7 +114,7 @@ TPO_LOGIN_URL=https://tpo.vierp.in
 TPO_HOME_URL=https://tpo.vierp.in/home
 TPO_DRIVES_URL=https://tpo.vierp.in/apply_company
 TPO_USERNAME=your_username
-TPO_PASSWORD=your_password
+TPO_PASSWORD=your_tpo_password
 TPO_DRIVE_CARD_SELECTOR=.drive-card
 TPO_COMPANY_NAME_SELECTOR=.company-name
 ```

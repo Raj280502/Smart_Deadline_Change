@@ -14,19 +14,20 @@ CHAT_ID   = os.getenv("TELEGRAM_CHAT_ID")
 BASE_URL  = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 
-def send_message(text: str, chat_id: str = None):
+def send_message(text: str, chat_id: str = None, bot_token: str = None):
     """
     Sends a formatted message via Telegram bot.
     """
+    token = bot_token or BOT_TOKEN
     target = chat_id or CHAT_ID
 
-    if not target or not BOT_TOKEN:
+    if not target or not token:
         print("  [Notification] Telegram not configured — skipping.")
         return False
 
     try:
         response = httpx.post(
-            f"{BASE_URL}/sendMessage",
+            f"https://api.telegram.org/bot{token}/sendMessage",
             json={
                 "chat_id":    target,
                 "text":       text,

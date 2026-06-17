@@ -75,8 +75,27 @@ def init_db():
     """)
 
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            email           TEXT UNIQUE NOT NULL,
+            password_hash   TEXT NOT NULL,
+            created_at      TEXT NOT NULL
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_credentials (
+            user_id       INTEGER PRIMARY KEY,
+            encrypted_json TEXT NOT NULL,
+            updated_at    TEXT NOT NULL,
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+    """)
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS placement_drives (
             id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id          INTEGER DEFAULT 1,
             portal_name      TEXT NOT NULL,
             external_id      TEXT,
             company_name     TEXT NOT NULL,
@@ -100,9 +119,10 @@ def init_db():
             source_hash      TEXT,
             first_seen_at    TEXT,
             last_seen_at     TEXT,
-            UNIQUE(portal_name, external_id)
+            UNIQUE(user_id, portal_name, external_id)
         )
     """)
+    ensure_column(cursor, "placement_drives", "user_id", "INTEGER DEFAULT 1")
     ensure_column(cursor, "placement_drives", "min_stipend", "TEXT")
     ensure_column(cursor, "placement_drives", "max_stipend", "TEXT")
     ensure_column(cursor, "placement_drives", "eligible_branches", "TEXT")
@@ -110,6 +130,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS placement_drive_changes (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id        INTEGER DEFAULT 1,
             drive_id       INTEGER NOT NULL,
             field_changed  TEXT NOT NULL,
             old_value      TEXT,
@@ -118,10 +139,12 @@ def init_db():
             FOREIGN KEY(drive_id) REFERENCES placement_drives(id)
         )
     """)
+    ensure_column(cursor, "placement_drive_changes", "user_id", "INTEGER DEFAULT 1")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS placement_scrape_runs (
             id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER DEFAULT 1,
             portal_name           TEXT NOT NULL,
             started_at            TEXT NOT NULL,
             finished_at           TEXT,
@@ -131,6 +154,7 @@ def init_db():
             error_message         TEXT
         )
     """)
+    ensure_column(cursor, "placement_scrape_runs", "user_id", "INTEGER DEFAULT 1")
 
     conn.commit()
     conn.close()

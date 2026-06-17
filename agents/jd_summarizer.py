@@ -33,7 +33,7 @@ Job description text:
 
 
 def summarize_jd(company_name: str, role: str = "", criteria: str = "",
-                 job_description: str = "") -> dict:
+                 job_description: str = "", api_key: str = None) -> dict:
     """
     Summarize a placement JD with Groq.
 
@@ -44,7 +44,7 @@ def summarize_jd(company_name: str, role: str = "", criteria: str = "",
     if not job_description:
         return empty_summary("No JD text was available.")
 
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = api_key or os.getenv("GROQ_API_KEY")
     if not api_key:
         return empty_summary("GROQ_API_KEY is missing, so JD was not summarized.")
 

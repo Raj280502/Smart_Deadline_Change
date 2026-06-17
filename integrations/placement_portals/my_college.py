@@ -34,13 +34,14 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
 
     portal_name = "my_college"
 
-    def __init__(self):
-        self.login_url = os.getenv("TPO_LOGIN_URL", "https://tpo.vierp.in")
-        self.home_url = os.getenv("TPO_HOME_URL", "https://tpo.vierp.in/home")
-        self.drives_url = os.getenv("TPO_DRIVES_URL", "https://tpo.vierp.in/apply_company")
-        self.username = os.getenv("TPO_USERNAME", "")
-        self.password = os.getenv("TPO_PASSWORD", "")
-        self.headless = os.getenv("TPO_HEADLESS", "true").lower() != "false"
+    def __init__(self, config: dict = None):
+        config = config or {}
+        self.login_url = config.get("tpo_login_url") or os.getenv("TPO_LOGIN_URL", "https://tpo.vierp.in")
+        self.home_url = config.get("tpo_home_url") or os.getenv("TPO_HOME_URL", "https://tpo.vierp.in/home")
+        self.drives_url = config.get("tpo_drives_url") or os.getenv("TPO_DRIVES_URL", "https://tpo.vierp.in/apply_company")
+        self.username = config.get("tpo_username") or os.getenv("TPO_USERNAME", "")
+        self.password = config.get("tpo_password") or os.getenv("TPO_PASSWORD", "")
+        self.headless = str(config.get("tpo_headless", os.getenv("TPO_HEADLESS", "true"))).lower() != "false"
 
         self.username_selector = os.getenv("TPO_USERNAME_SELECTOR", "input[type='email']")
         self.password_selector = os.getenv("TPO_PASSWORD_SELECTOR", "input[type='password']")

@@ -18,7 +18,11 @@ from storage.placement_repository import (
 )
 
 
-def sync_placement_drives(send_notifications: bool = True) -> dict:
+def sync_placement_drives(
+    send_notifications: bool = True,
+    credentials: dict = None,
+    user_id: int = 1,
+) -> dict:
     """
     Main placement watcher flow.
 
@@ -30,8 +34,9 @@ def sync_placement_drives(send_notifications: bool = True) -> dict:
         upsert into DB
         notify Telegram
     """
-    adapter = get_active_adapter()
-    run_id = start_scrape_run(adapter.portal_name)
+    credentials = credentials or {}
+    adapter = get_active_adapter(config=credentials)
+    run_id = start_scrape_run(adapter.portal_name, user_id=user_id)
     new_count = 0
     changed_count = 0
     results = []
@@ -49,19 +54,29 @@ def sync_placement_drives(send_notifications: bool = True) -> dict:
                 role=drive.get("role"),
                 criteria=drive.get("criteria"),
                 job_description=drive.get("job_description"),
+                api_key=credentials.get("groq_api_key"),
             )
             drive["jd_summary"] = json.dumps(summary, ensure_ascii=True)
 
-            saved_drive, changes, is_new = upsert_placement_drive(drive)
+            saved_drive, changes, is_new = upsert_placement_drive(drive, user_id=user_id)
 
             if is_new:
                 new_count += 1
                 if send_notifications:
-                    notify_new_placement_drive(saved_drive)
+                    notify_new_placement_drive(
+                        saved_drive,
+                        bot_token=credentials.get("telegram_bot_token"),
+                        chat_id=credentials.get("telegram_chat_id"),
+                    )
             elif changes:
                 changed_count += 1
                 if send_notifications:
-                    notify_changed_placement_drive(saved_drive, changes)
+                    notify_changed_placement_drive(
+                        saved_drive,
+                        changes,
+                        bot_token=credentials.get("telegram_bot_token"),
+                        chat_id=credentials.get("telegram_chat_id"),
+                    )
 
             results.append({
                 "drive": saved_drive,

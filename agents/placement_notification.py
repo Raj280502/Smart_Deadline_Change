@@ -4,12 +4,29 @@ from datetime import datetime
 from agents.notification import send_message
 
 
-def notify_new_placement_drive(drive: dict) -> bool:
-    return send_message(format_placement_drive_alert(drive, "NEW PLACEMENT DRIVE"))
+def notify_new_placement_drive(
+    drive: dict,
+    bot_token: str = None,
+    chat_id: str = None,
+) -> bool:
+    return send_message(
+        format_placement_drive_alert(drive, "NEW PLACEMENT DRIVE"),
+        chat_id=chat_id,
+        bot_token=bot_token,
+    )
 
 
-def notify_changed_placement_drive(drive: dict, changes: list) -> bool:
-    return send_message(format_placement_drive_alert(drive, "PLACEMENT DRIVE UPDATED", changes))
+def notify_changed_placement_drive(
+    drive: dict,
+    changes: list,
+    bot_token: str = None,
+    chat_id: str = None,
+) -> bool:
+    return send_message(
+        format_placement_drive_alert(drive, "PLACEMENT DRIVE UPDATED", changes),
+        chat_id=chat_id,
+        bot_token=bot_token,
+    )
 
 
 def format_placement_drive_alert(drive: dict, title: str, changes: list = None) -> str:

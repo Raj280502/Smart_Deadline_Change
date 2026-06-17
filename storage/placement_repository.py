@@ -34,7 +34,7 @@ def make_source_hash(drive: dict) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def upsert_placement_drive(drive: dict) -> Tuple[dict, List[dict], bool]:
+def upsert_placement_drive(drive: dict, user_id: int = 1) -> Tuple[dict, List[dict], bool]:
     """
     Insert or update a placement drive.
 
@@ -48,25 +48,26 @@ def upsert_placement_drive(drive: dict) -> Tuple[dict, List[dict], bool]:
     existing = conn.execute(
         """
         SELECT * FROM placement_drives
-        WHERE portal_name = ? AND external_id = ?
+        WHERE user_id = ? AND portal_name = ? AND external_id = ?
         """,
-        (drive["portal_name"], drive.get("external_id")),
+        (user_id, drive["portal_name"], drive.get("external_id")),
     ).fetchone()
 
     if not existing:
         cursor = conn.execute(
             """
             INSERT INTO placement_drives (
-                portal_name, external_id, company_name, role, min_package,
+                user_id, portal_name, external_id, company_name, role, min_package,
                 max_package, min_stipend, max_stipend, location, duration,
                 criteria, eligible_branches, deadline_date, deadline_time,
                 job_description, jd_summary, document_url,
                 local_document, apply_url, status, source_hash,
                 first_seen_at, last_seen_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                user_id,
                 drive["portal_name"],
                 drive.get("external_id"),
                 drive["company_name"],
@@ -152,11 +153,12 @@ def upsert_placement_drive(drive: dict) -> Tuple[dict, List[dict], bool]:
             conn.execute(
                 """
                 INSERT INTO placement_drive_changes (
-                    drive_id, field_changed, old_value, new_value, detected_at
+                    user_id, drive_id, field_changed, old_value, new_value, detected_at
                 )
-                VALUES (?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    user_id,
                     existing_dict["id"],
                     change["field_changed"],
                     change["old_value"],
@@ -188,21 +190,22 @@ def get_placement_drive_by_id(drive_id: int, conn=None) -> Dict:
     return dict(row) if row else {}
 
 
-def list_placement_drives(limit: int = 100) -> List[Dict]:
+def list_placement_drives(limit: int = 100, user_id: int = 1) -> List[Dict]:
     conn = get_connection()
     rows = conn.execute(
         """
         SELECT * FROM placement_drives
+        WHERE user_id = ?
         ORDER BY COALESCE(deadline_date, '9999-12-31') ASC, last_seen_at DESC
         LIMIT ?
         """,
-        (limit,),
+        (user_id, limit),
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
 
-def list_placement_changes(limit: int = 100) -> List[Dict]:
+def list_placement_changes(limit: int = 100, user_id: int = 1) -> List[Dict]:
     conn = get_connection()
     rows = conn.execute(
         """
@@ -210,24 +213,25 @@ def list_placement_changes(limit: int = 100) -> List[Dict]:
                c.old_value, c.new_value, c.detected_at
         FROM placement_drive_changes c
         JOIN placement_drives d ON c.drive_id = d.id
+        WHERE c.user_id = ?
         ORDER BY c.detected_at DESC
         LIMIT ?
         """,
-        (limit,),
+        (user_id, limit),
     ).fetchall()
     conn.close()
     return [dict(row) for row in rows]
 
 
-def start_scrape_run(portal_name: str) -> int:
+def start_scrape_run(portal_name: str, user_id: int = 1) -> int:
     now = datetime.now().isoformat()
     conn = get_connection()
     cursor = conn.execute(
         """
-        INSERT INTO placement_scrape_runs (portal_name, started_at, status)
-        VALUES (?, ?, 'running')
+        INSERT INTO placement_scrape_runs (user_id, portal_name, started_at, status)
+        VALUES (?, ?, ?, 'running')
         """,
-        (portal_name, now),
+        (user_id, portal_name, now),
     )
     conn.commit()
     run_id = cursor.lastrowid

@@ -1,21 +1,53 @@
-```
+# Environment and secrets
 .env
-.env.local
-.env.production.local
-venv/
-__pycache__/
-*.pyc
-.DS_Store
-token.json
+.env.*
+!.env.example
 credentials.json
+token.json
+*credentials*.json
+*token*.json
+*.pem
+*.key
+*.p12
+
+# Local databases and vector stores
 smart_deadline.db
+*.db
+*.db-shm
+*.db-wal
 chroma_db/
+
+# Runtime/generated placement artifacts
+storage/placement_documents/
+downloads/
+*.log
+uvicorn-*.log
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node/frontend
 node_modules/
 frontend/node_modules/
 frontend/dist/
-*.egg-info/
-.pytest_cache/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
-# Logs and local documents
-*.log
-storage/placement_documents/
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Browser/test artifacts
+playwright-report/
+test-results/
+.playwright/

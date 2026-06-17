@@ -13,7 +13,7 @@ ADAPTERS = {
 }
 
 
-def get_active_adapter() -> BasePlacementPortalAdapter:
+def get_active_adapter(config: dict = None) -> BasePlacementPortalAdapter:
     """
     Selects the active portal plugin.
 
@@ -23,11 +23,14 @@ def get_active_adapter() -> BasePlacementPortalAdapter:
     Later, other colleges can register their own adapter class in ADAPTERS
     without changing the scraper, database, API, or notification code.
     """
-    adapter_name = os.getenv("PLACEMENT_PORTAL_ADAPTER", "my_college")
+    config = config or {}
+    adapter_name = config.get("placement_portal_adapter") or os.getenv(
+        "PLACEMENT_PORTAL_ADAPTER", "my_college"
+    )
     adapter_class = ADAPTERS.get(adapter_name)
 
     if not adapter_class:
         available = ", ".join(sorted(ADAPTERS))
         raise ValueError(f"Unknown placement adapter '{adapter_name}'. Available: {available}")
 
-    return adapter_class()
+    return adapter_class(config=config)
