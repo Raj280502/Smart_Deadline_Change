@@ -283,7 +283,7 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
             if download_link.count() > 0
             else self._href(page, self.jd_document_selector)
         )
-        drive.apply_url = self._first(self._href(page, self.apply_link_selector), page.url)
+        drive.apply_url = page.url
         return drive
 
     def _require_page(self):
@@ -348,6 +348,25 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
 
     @staticmethod
     def _label(page_text: str, label: str) -> Optional[str]:
+        lines = [line.strip() for line in page_text.splitlines() if line.strip()]
+        exact_line = re.compile(
+            rf"^{re.escape(label)}\s*:\s*(.+?)\s*$",
+            flags=re.IGNORECASE,
+        )
+        for line in lines:
+            match = exact_line.match(line)
+            if match:
+                value = match.group(1).strip(" :")
+                if value:
+                    return value
+
+        for index, line in enumerate(lines):
+            if re.fullmatch(re.escape(label), line, flags=re.IGNORECASE):
+                for candidate in lines[index + 1:index + 4]:
+                    value = candidate.strip(" :")
+                    if value and not re.fullmatch(r":", value):
+                        return value
+
         labels = [
             "Company", "Company Code", "Company Type", "Schedule Date",
             "Industry Type", "Min Package", "Max Package", "Job Locations",
@@ -359,7 +378,7 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
             "Collaborators", "Is Drive Completed?", "Remark"
         ]
         boundary = "|".join(re.escape(item) for item in labels if item != label)
-        pattern = rf"{re.escape(label)}\s*:?\s*(.*?)(?=\s+(?:{boundary})\s*:|\n(?:{boundary})\b|$)"
+        pattern = rf"{re.escape(label)}\s*:\s*(.*?)(?=\s+(?:{boundary})\s*:|\n(?:{boundary})\b|$)"
         match = re.search(pattern, page_text, flags=re.IGNORECASE | re.DOTALL)
         if not match:
             return None

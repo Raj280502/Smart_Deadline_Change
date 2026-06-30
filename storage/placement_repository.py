@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import datetime
+from urllib.parse import urlsplit, urlunsplit
 from typing import Dict, List, Tuple
 
 from storage.database import get_connection
@@ -29,9 +30,21 @@ TRACKED_FIELDS = [
 
 def make_source_hash(drive: dict) -> str:
     """Create a stable hash so we can detect any portal data change."""
-    payload = {field: drive.get(field) or "" for field in TRACKED_FIELDS}
+    payload = {
+        field: _stable_field_value(field, drive.get(field))
+        for field in TRACKED_FIELDS
+    }
     raw = json.dumps(payload, sort_keys=True, ensure_ascii=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _stable_field_value(field: str, value) -> str:
+    if not value:
+        return ""
+    if field == "document_url":
+        parts = urlsplit(str(value))
+        return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+    return str(value)
 
 
 def upsert_placement_drive(drive: dict, user_id: int = 1) -> Tuple[dict, List[dict], bool]:

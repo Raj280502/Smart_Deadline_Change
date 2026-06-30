@@ -126,6 +126,7 @@ def init_db():
     ensure_column(cursor, "placement_drives", "min_stipend", "TEXT")
     ensure_column(cursor, "placement_drives", "max_stipend", "TEXT")
     ensure_column(cursor, "placement_drives", "eligible_branches", "TEXT")
+    ensure_placement_drives_user_scoped_unique(cursor)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS placement_drive_changes (
@@ -168,6 +169,73 @@ def ensure_column(cursor, table_name: str, column_name: str, column_type: str):
         cursor.execute(
             f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
         )
+
+
+def ensure_placement_drives_user_scoped_unique(cursor):
+    """Migrate older DBs from global drive uniqueness to per-user uniqueness."""
+    row = cursor.execute(
+        """
+        SELECT sql FROM sqlite_master
+        WHERE type = 'table' AND name = 'placement_drives'
+        """
+    ).fetchone()
+    if not row or not row[0]:
+        return
+
+    normalized_sql = " ".join(row[0].replace("\n", " ").split()).lower()
+    if "unique(user_id, portal_name, external_id)" in normalized_sql:
+        return
+    if "unique(portal_name, external_id)" not in normalized_sql:
+        return
+
+    cursor.execute("ALTER TABLE placement_drives RENAME TO placement_drives_old")
+    cursor.execute("""
+        CREATE TABLE placement_drives (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id          INTEGER DEFAULT 1,
+            portal_name      TEXT NOT NULL,
+            external_id      TEXT,
+            company_name     TEXT NOT NULL,
+            role             TEXT,
+            min_package      TEXT,
+            max_package      TEXT,
+            min_stipend      TEXT,
+            max_stipend      TEXT,
+            location         TEXT,
+            duration         TEXT,
+            criteria         TEXT,
+            eligible_branches TEXT,
+            deadline_date    TEXT,
+            deadline_time    TEXT,
+            job_description  TEXT,
+            jd_summary       TEXT,
+            document_url     TEXT,
+            local_document   TEXT,
+            apply_url        TEXT,
+            status           TEXT DEFAULT 'open',
+            source_hash      TEXT,
+            first_seen_at    TEXT,
+            last_seen_at     TEXT,
+            UNIQUE(user_id, portal_name, external_id)
+        )
+    """)
+    cursor.execute("""
+        INSERT OR IGNORE INTO placement_drives (
+            id, user_id, portal_name, external_id, company_name, role,
+            min_package, max_package, min_stipend, max_stipend, location,
+            duration, criteria, eligible_branches, deadline_date, deadline_time,
+            job_description, jd_summary, document_url, local_document, apply_url,
+            status, source_hash, first_seen_at, last_seen_at
+        )
+        SELECT
+            id, COALESCE(user_id, 1), portal_name, external_id, company_name, role,
+            min_package, max_package, min_stipend, max_stipend, location,
+            duration, criteria, eligible_branches, deadline_date, deadline_time,
+            job_description, jd_summary, document_url, local_document, apply_url,
+            status, source_hash, first_seen_at, last_seen_at
+        FROM placement_drives_old
+    """)
+    cursor.execute("DROP TABLE placement_drives_old")
 
 # Run init when this file is imported
 if __name__ == "__main__":

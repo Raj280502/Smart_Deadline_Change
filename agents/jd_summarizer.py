@@ -55,12 +55,15 @@ def summarize_jd(company_name: str, role: str = "", criteria: str = "",
     )
     chain = JD_SUMMARY_PROMPT | llm | StrOutputParser()
 
-    raw = chain.invoke({
-        "company_name": company_name or "Unknown company",
-        "role": role or "Unknown role",
-        "criteria": criteria or "Not mentioned",
-        "job_description": job_description[:12000],
-    })
+    try:
+        raw = chain.invoke({
+            "company_name": company_name or "Unknown company",
+            "role": role or "Unknown role",
+            "criteria": criteria or "Not mentioned",
+            "job_description": job_description[:12000],
+        })
+    except Exception as exc:
+        return empty_summary(f"JD summary failed: {exc}")
 
     return parse_summary(raw)
 

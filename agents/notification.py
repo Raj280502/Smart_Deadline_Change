@@ -22,7 +22,7 @@ def send_message(text: str, chat_id: str = None, bot_token: str = None):
     target = chat_id or CHAT_ID
 
     if not target or not token:
-        print("  [Notification] Telegram not configured — skipping.")
+        print("  [Notification] Telegram not configured - skipping.")
         return False
 
     try:
@@ -37,13 +37,13 @@ def send_message(text: str, chat_id: str = None, bot_token: str = None):
         )
         data = response.json()
         if data.get("ok"):
-            print(f"  [Notification] ✅ Telegram message sent.")
+            print("  [Notification] Telegram message sent.")
             return True
         else:
-            print(f"  [Notification] ❌ Failed: {data}")
+            print(f"  [Notification] Failed: {data}")
             return False
     except Exception as e:
-        print(f"  [Notification] ❌ Error: {e}")
+        print(f"  [Notification] Error: {e}")
         return False
 
 
