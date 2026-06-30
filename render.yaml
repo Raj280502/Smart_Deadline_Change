@@ -18,10 +18,6 @@ services:
       - key: AUTH_SECRET
         generateValue: true
       - key: DATABASE_PATH
-        value: /opt/render/project/src/storage/smart_deadline.db
+        value: storage/smart_deadline.db
       - key: FRONTEND_URL
         sync: false
-    disk:
-      name: smart-deadline-data
-      mountPath: /opt/render/project/src/storage
-      sizeGB: 1
