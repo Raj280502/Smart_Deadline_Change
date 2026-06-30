@@ -1,10 +1,14 @@
 import sqlite3
+import os
 
-# Database will be created as a file in the project root
-DB_PATH = "smart_deadline.db"
+# Use storage/ by default so Render persistent disk keeps SQLite data.
+DB_PATH = os.getenv("DATABASE_PATH", os.path.join("storage", "smart_deadline.db"))
 
 def get_connection():
     """Get a connection to the SQLite database."""
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir:
+        os.makedirs(db_dir, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
