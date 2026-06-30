@@ -7,11 +7,6 @@ from pydantic import BaseModel, EmailStr
 from storage.database import init_db
 from fastapi.middleware.cors import CORSMiddleware
 from storage.database import get_connection
-from integrations.ingestion import run_ingestion_once
-from storage.database import get_connection
-from orchestrator.graph import process_all_unprocessed
-from storage.database import get_connection
-from orchestrator.graph import process_message
 from storage.auth_repository import (
     authenticate_user,
     create_access_token,
@@ -77,6 +72,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+DEADLINE_TRACKER_ENABLED = os.getenv("ENABLE_DEADLINE_TRACKER", "false").lower() == "true"
+
+
+def require_deadline_tracker_enabled():
+    if not DEADLINE_TRACKER_ENABLED:
+        raise HTTPException(
+            status_code=503,
+            detail="Deadline tracker is disabled in this deployment.",
+        )
 
 @app.get("/")
 def root():
@@ -147,6 +152,7 @@ def credential_status(user=Depends(get_current_user)):
 @app.get("/changes")
 def list_changes():
     """View full change history with event names."""
+    require_deadline_tracker_enabled()
     conn = get_connection()
     rows = conn.execute("""
         SELECT ch.id, d.event_name, ch.field_changed,
@@ -161,6 +167,8 @@ def list_changes():
 @app.post("/ingest")
 def trigger_ingestion():
     """Manually trigger ingestion from all sources."""
+    require_deadline_tracker_enabled()
+    from integrations.ingestion import run_ingestion_once
     total = run_ingestion_once()
     return {"new_messages_saved": total}
 
@@ -171,6 +179,7 @@ def list_messages(source: str = None, unprocessed_only: bool = False):
     Optional filters: ?source=gmail or ?source=telegram
                       ?unprocessed_only=true
     """
+    require_deadline_tracker_enabled()
     conn  = get_connection()
     query = "SELECT id, source, sender, subject, body, received_at, processed FROM raw_messages WHERE 1=1"
     params = []
@@ -193,12 +202,15 @@ def process_messages():
     the full LangGraph multi-agent pipeline.
     Replaces the old /classify endpoint.
     """
+    require_deadline_tracker_enabled()
+    from orchestrator.graph import process_all_unprocessed
     result = process_all_unprocessed()
     return result
 
 @app.post("/process/single")
 def process_single(message_id: str):
     """Process one specific message through the graph."""
+    require_deadline_tracker_enabled()
     conn = get_connection()
     msg  = conn.execute(
         "SELECT id, source, sender, subject, body FROM raw_messages WHERE id = ?",
@@ -209,6 +221,7 @@ def process_single(message_id: str):
     if not msg:
         return {"error": "Message not found"}
 
+    from orchestrator.graph import process_message
     result = process_message(dict(msg))
     return {
         "message_id":      message_id,
@@ -221,6 +234,7 @@ def process_single(message_id: str):
 @app.get("/deadlines")
 def list_deadlines():
     """View all extracted deadlines."""
+    require_deadline_tracker_enabled()
     conn  = get_connection()
     rows  = conn.execute("""
         SELECT id, event_name, deadline_date, deadline_time,
@@ -238,6 +252,7 @@ def search_vector_store(q: str, threshold: float = 0.3):
     Search deadlines by meaning.
     Example: /vector-store/search?q=ML exam rescheduled
     """
+    require_deadline_tracker_enabled()
     from storage.vector_store import search_similar_deadlines
     matches = search_similar_deadlines(q, threshold=threshold)
     return {"query": q, "matches": matches}
@@ -245,6 +260,7 @@ def search_vector_store(q: str, threshold: float = 0.3):
 @app.get("/vector-store/all")
 def list_vector_store():
     """See everything stored in ChromaDB."""
+    require_deadline_tracker_enabled()
     from storage.vector_store import get_all_deadlines_in_store
     items = get_all_deadlines_in_store()
     return {"total": len(items), "items": items}
@@ -253,6 +269,7 @@ def list_vector_store():
 @app.get("/predictions/risk")
 def get_high_risk():
     """See all deadlines with HIGH or CRITICAL risk."""
+    require_deadline_tracker_enabled()
     from agents.prediction import get_high_risk_deadlines
     deadlines = get_high_risk_deadlines(threshold=0.6)
     return {"high_risk_deadlines": deadlines}
@@ -260,6 +277,7 @@ def get_high_risk():
 @app.get("/predictions/senders")
 def get_sender_stats():
     """See change rate stats per sender."""
+    require_deadline_tracker_enabled()
     from agents.prediction import get_all_sender_stats
     stats = get_all_sender_stats()
     return {"sender_stats": stats}
@@ -267,6 +285,7 @@ def get_sender_stats():
 @app.post("/notify/test")
 def test_notification():
     """Send a test Telegram message to verify bot is working."""
+    require_deadline_tracker_enabled()
     from agents.notification import send_message
     success = send_message(
         "🤖 <b>Smart Deadline & Change</b>\n\n"
@@ -278,6 +297,7 @@ def test_notification():
 @app.post("/calendar/test")
 def test_calendar():
     """Test Google Calendar integration."""
+    require_deadline_tracker_enabled()
     from integrations.calendar_client import create_calendar_event
     event = create_calendar_event(
         event_name="Smart Deadline Test",
@@ -301,6 +321,7 @@ def chat_endpoint(question: str):
     - Which deadlines are high risk?
     - Was anything cancelled?
     """
+    require_deadline_tracker_enabled()
     from agents.chat_agent import chat
     result = chat(question)
     return result
@@ -309,12 +330,14 @@ def chat_endpoint(question: str):
 @app.get("/chat/history")
 def chat_history():
     """View conversation history."""
+    require_deadline_tracker_enabled()
     from agents.chat_agent import get_conversation_history
     return {"history": get_conversation_history()}
 
 @app.delete("/chat/history")
 def clear_chat_history():
     """Clear conversation history."""
+    require_deadline_tracker_enabled()
     from agents.chat_agent import clear_history
     clear_history()
     return {"status": "history cleared"}

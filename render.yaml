@@ -19,3 +19,5 @@ services:
         value: storage/smart_deadline.db
       - key: FRONTEND_URL
         sync: false
+      - key: ENABLE_DEADLINE_TRACKER
+        value: false
