@@ -251,12 +251,16 @@ function Bubble({ msg }) {
   );
 }
 
-function AuthScreen({ onAuth }) {
+function AuthScreen({ onAuth, sessionMessage = "" }) {
   const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(sessionMessage);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setError(sessionMessage);
+  }, [sessionMessage]);
 
   async function submit(event) {
     event.preventDefault();
@@ -341,6 +345,7 @@ function SettingsPanel({ credentialStatus, onSave }) {
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState("");
 
   function update(key, value) {
     setSaved(false);
@@ -350,17 +355,23 @@ function SettingsPanel({ credentialStatus, onSave }) {
   async function submit(event) {
     event.preventDefault();
     setSaving(true);
-    await onSave(form);
-    setSaving(false);
-    setSaved(true);
-    setForm((current) => ({
-      ...current,
-      groq_api_key: "",
-      telegram_bot_token: "",
-      telegram_chat_id: "",
-      tpo_username: "",
-      tpo_password: "",
-    }));
+    setError("");
+    try {
+      await onSave(form);
+      setSaved(true);
+      setForm((current) => ({
+        ...current,
+        groq_api_key: "",
+        telegram_bot_token: "",
+        telegram_chat_id: "",
+        tpo_username: "",
+        tpo_password: "",
+      }));
+    } catch (err) {
+      setError(err.response?.data?.detail || err.message || "Could not save credentials.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -387,6 +398,12 @@ function SettingsPanel({ credentialStatus, onSave }) {
         </button>
         {saved && <span className="text-sm text-emerald-300">Saved</span>}
       </div>
+
+      {error && (
+        <div className="mt-4 border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">
+          {error}
+        </div>
+      )}
     </form>
   );
 }
@@ -409,6 +426,7 @@ function Field({ label, value, onChange, placeholder = "", type = "text" }) {
 export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem("auth_token") || "");
   const [user, setUser] = useState(null);
+  const [authNotice, setAuthNotice] = useState("");
   const [credentialStatus, setCredentialStatus] = useState(null);
   const [view, setView] = useState("watch");
   const [deadlines, setDeadlines] = useState([]);
@@ -435,14 +453,16 @@ export default function App() {
     localStorage.setItem("auth_token", data.token);
     setToken(data.token);
     setUser(data.user);
+    setAuthNotice("");
     setView("settings");
   }
 
-  function logout() {
+  function logout(message = "") {
     localStorage.removeItem("auth_token");
     setToken("");
     setUser(null);
     setCredentialStatus(null);
+    setAuthNotice(message);
   }
 
   async function fetchAll() {
@@ -479,7 +499,9 @@ export default function App() {
       }
     } catch (error) {
       console.error("Fetch error:", error);
-      if (error.response?.status === 401) logout();
+      if (error.response?.status === 401) {
+        logout("Your session expired or became invalid after deployment. Please sign in again.");
+      }
     }
     setLoading(false);
   }
@@ -502,6 +524,11 @@ export default function App() {
     } catch (error) {
       console.error("Placement sync failed:", error);
       const detail = error.response?.data?.detail || error.response?.data?.error;
+      if (error.response?.status === 401) {
+        logout("Your session expired before running placement sync. Please sign in again.");
+        setSyncing(false);
+        return;
+      }
       setPlacementStatus((current) => ({
         ...(current || {}),
         last_error: detail || "Placement sync failed. Check API logs.",
@@ -521,10 +548,18 @@ export default function App() {
   }
 
   async function saveCredentials(form) {
-    const res = await axios.put(`${API}/settings/credentials`, form, {
-      headers: authHeaders(),
-    });
-    setCredentialStatus(res.data.credentials);
+    try {
+      const res = await axios.put(`${API}/settings/credentials`, form, {
+        headers: authHeaders(),
+      });
+      setCredentialStatus(res.data.credentials);
+    } catch (error) {
+      if (error.response?.status === 401) {
+        logout("Your session expired while saving credentials. Please sign in again.");
+        return;
+      }
+      throw error;
+    }
   }
 
   async function sendQuestion() {
@@ -576,7 +611,7 @@ export default function App() {
   ];
 
   if (!token) {
-    return <AuthScreen onAuth={handleAuth} />;
+    return <AuthScreen onAuth={handleAuth} sessionMessage={authNotice} />;
   }
 
   return (
