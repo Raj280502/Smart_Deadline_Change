@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 import sys
 import asyncio
+import hmac
 from pydantic import BaseModel, EmailStr
 from storage.database import init_db
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,6 +70,7 @@ allowed_origins = [url for url in allowed_origins if url]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -82,6 +84,12 @@ def require_deadline_tracker_enabled():
             status_code=503,
             detail="Deadline tracker is disabled in this deployment.",
         )
+
+
+def require_admin_secret(secret: str):
+    expected = os.getenv("PLACEMENT_CRON_SECRET") or os.getenv("ADMIN_RESET_SECRET")
+    if not expected or not hmac.compare_digest(secret, expected):
+        raise HTTPException(status_code=403, detail="Invalid admin secret")
 
 @app.get("/")
 def root():
@@ -148,6 +156,87 @@ def update_credentials(
 @app.get("/settings/credentials/status")
 def credential_status(user=Depends(get_current_user)):
     return {"credentials": get_credential_status(user["id"])}
+
+
+@app.post("/admin/reset-users")
+def reset_users(secret: str):
+    """
+    Delete all locally stored users and placement data.
+
+    Intended only for early deployment testing. Requires PLACEMENT_CRON_SECRET
+    or ADMIN_RESET_SECRET to be configured in the environment.
+    """
+    require_admin_secret(secret)
+    conn = get_connection()
+    counts = {}
+    for table in [
+        "placement_drive_changes",
+        "placement_drives",
+        "placement_scrape_runs",
+        "user_credentials",
+        "users",
+    ]:
+        counts[table] = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()
+    conn.close()
+    return {"status": "reset", "deleted": counts}
+
+
+@app.post("/placements/cron/run")
+def run_placement_cron(secret: str):
+    """
+    Deployment-friendly placement watcher entrypoint.
+
+    Use an external cron service to call this every 30 minutes. It checks every
+    user with saved TPO credentials and sends Telegram notifications.
+    """
+    require_admin_secret(secret)
+    from agents.placement_notification import notify_no_placement_drives
+    from integrations.placement_scraper import sync_placement_drives
+
+    conn = get_connection()
+    users = conn.execute("SELECT id, email FROM users ORDER BY id").fetchall()
+    conn.close()
+
+    results = []
+    for user_row in users:
+        user_id = user_row["id"]
+        status = get_credential_status(user_id)
+        ready = (
+            status.get("tpo_username")
+            and status.get("tpo_password")
+            and status.get("tpo_drives_url")
+        )
+        if not ready:
+            results.append({
+                "user_id": user_id,
+                "email": user_row["email"],
+                "status": "skipped",
+                "reason": "TPO credentials missing",
+            })
+            continue
+        credentials = get_user_credentials(user_id)
+        result = sync_placement_drives(
+            send_notifications=True,
+            credentials=credentials,
+            user_id=user_id,
+        )
+        no_drive_notification_sent = False
+        if result.get("status") == "success" and result.get("total_seen") == 0:
+            no_drive_notification_sent = notify_no_placement_drives(
+                portal_name=result.get("portal_name", "TPO portal"),
+                bot_token=credentials.get("telegram_bot_token"),
+                chat_id=credentials.get("telegram_chat_id"),
+            )
+        results.append({
+            "user_id": user_id,
+            "email": user_row["email"],
+            "result": result,
+            "no_drive_notification_sent": no_drive_notification_sent,
+        })
+
+    return {"status": "completed", "users_checked": len(users), "results": results}
 
 @app.get("/changes")
 def list_changes():

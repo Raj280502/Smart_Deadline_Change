@@ -21,3 +21,5 @@ services:
         sync: false
       - key: ENABLE_DEADLINE_TRACKER
         value: false
+      - key: PLACEMENT_CRON_SECRET
+        sync: false

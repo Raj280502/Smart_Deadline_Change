@@ -29,6 +29,30 @@ def notify_changed_placement_drive(
     )
 
 
+def notify_no_placement_drives(
+    portal_name: str = "TPO portal",
+    bot_token: str = None,
+    chat_id: str = None,
+) -> bool:
+    return send_message(
+        format_no_placement_drives_alert(portal_name),
+        chat_id=chat_id,
+        bot_token=bot_token,
+    )
+
+
+def format_no_placement_drives_alert(portal_name: str = "TPO portal") -> str:
+    lines = [
+        "<b>PLACEMENT WATCHER CHECK</b>",
+        "",
+        "No scheduled company drive found yet.",
+        f"<b>Portal:</b> {_value(portal_name)}",
+        "",
+        f"Checked at: {datetime.now().strftime('%d %b %Y %H:%M')}",
+    ]
+    return "\n".join(lines)
+
+
 def format_placement_drive_alert(drive: dict, title: str, changes: list = None) -> str:
     """
     Build Telegram HTML message.

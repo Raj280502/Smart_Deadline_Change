@@ -266,7 +266,11 @@ function AuthScreen({ onAuth }) {
       const res = await axios.post(`${API}/auth/${mode}`, { email, password });
       onAuth(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || "Authentication failed.");
+      setError(
+        err.response?.data?.detail
+        || err.message
+        || "Authentication failed. Check backend URL and CORS settings."
+      );
     }
     setLoading(false);
   }
@@ -444,14 +448,15 @@ export default function App() {
   async function fetchAll() {
     setLoading(true);
     try {
-      const [healthRes, deadlinesRes, changesRes] = await Promise.all([
-        axios.get(`${API}/health`),
+      const healthRes = await axios.get(`${API}/health`);
+      setHealth(healthRes.data);
+
+      const [deadlinesRes, changesRes] = await Promise.allSettled([
         axios.get(`${API}/deadlines`),
         axios.get(`${API}/changes`),
       ]);
-      setHealth(healthRes.data);
-      setDeadlines(deadlinesRes.data.deadlines || []);
-      setChanges(changesRes.data.changes || []);
+      setDeadlines(deadlinesRes.status === "fulfilled" ? deadlinesRes.value.data.deadlines || [] : []);
+      setChanges(changesRes.status === "fulfilled" ? changesRes.value.data.changes || [] : []);
 
       if (token) {
         const [meRes, placementsRes, placementChangesRes, schedulerRes] = await Promise.all([
@@ -464,7 +469,10 @@ export default function App() {
         setCredentialStatus(meRes.data.credentials);
         setPlacements(placementsRes.data.placements || []);
         setPlacementChanges(placementChangesRes.data.changes || []);
-        setPlacementStatus(schedulerRes.data || null);
+        setPlacementStatus((current) => ({
+          ...(current || {}),
+          ...(schedulerRes.data || {}),
+        }));
 
         const firstDrive = placementsRes.data.placements?.[0];
         if (!selectedDriveId && firstDrive) setSelectedDriveId(firstDrive.id);
@@ -487,14 +495,16 @@ export default function App() {
       setPlacementStatus((current) => ({
         ...(current || {}),
         last_result: res.data,
+        last_error: res.data?.status === "failed" ? res.data.error || "Placement sync failed." : "",
         last_run_at: new Date().toISOString(),
       }));
       await fetchAll();
     } catch (error) {
       console.error("Placement sync failed:", error);
+      const detail = error.response?.data?.detail || error.response?.data?.error;
       setPlacementStatus((current) => ({
         ...(current || {}),
-        last_error: "Placement sync failed. Check API logs.",
+        last_error: detail || "Placement sync failed. Check API logs.",
       }));
     }
     setSyncing(false);
@@ -662,6 +672,18 @@ export default function App() {
               {lastResult?.status === "success" && lastResult.total_seen === 0 && (
                 <div className="border border-slate-800 bg-slate-950/70 p-4 text-sm text-slate-400">
                   VIERP currently reports no scheduled companies. The watcher is still working and will notify when a drive appears.
+                </div>
+              )}
+
+              {lastResult?.status === "success" && lastResult.total_seen > 0 && (
+                <div className="border border-emerald-400/30 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+                  Sync completed. Seen: {lastResult.total_seen}, New: {lastResult.new_drives}, Changed: {lastResult.changed_drives}.
+                </div>
+              )}
+
+              {lastResult?.status === "failed" && (
+                <div className="border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-200">
+                  {lastResult.error || "Placement sync failed."}
                 </div>
               )}
 
