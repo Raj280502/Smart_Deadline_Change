@@ -5,6 +5,7 @@ from agents.jd_summarizer import summarize_jd
 from agents.placement_notification import (
     notify_changed_placement_drive,
     notify_new_placement_drive,
+    notify_no_placement_drives,
 )
 from integrations.document_reader import (
     download_document,
@@ -39,11 +40,19 @@ def sync_placement_drives(
     run_id = start_scrape_run(adapter.portal_name, user_id=user_id)
     new_count = 0
     changed_count = 0
+    no_drive_notification_sent = False
     results = []
 
     try:
         adapter.login()
         drives = adapter.fetch_drives()
+
+        if send_notifications and not drives:
+            no_drive_notification_sent = notify_no_placement_drives(
+                portal_name=adapter.portal_name,
+                bot_token=credentials.get("telegram_bot_token"),
+                chat_id=credentials.get("telegram_chat_id"),
+            )
 
         for drive_obj in drives:
             drive = drive_obj.to_dict()
@@ -91,6 +100,7 @@ def sync_placement_drives(
             "total_seen": len(drives),
             "new_drives": new_count,
             "changed_drives": changed_count,
+            "no_drive_notification_sent": no_drive_notification_sent,
             "results": results,
         }
     except Exception as exc:

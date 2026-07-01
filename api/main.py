@@ -192,7 +192,6 @@ def run_placement_cron(secret: str):
     user with saved TPO credentials and sends Telegram notifications.
     """
     require_admin_secret(secret)
-    from agents.placement_notification import notify_no_placement_drives
     from integrations.placement_scraper import sync_placement_drives
 
     conn = get_connection()
@@ -222,18 +221,10 @@ def run_placement_cron(secret: str):
             credentials=credentials,
             user_id=user_id,
         )
-        no_drive_notification_sent = False
-        if result.get("status") == "success" and result.get("total_seen") == 0:
-            no_drive_notification_sent = notify_no_placement_drives(
-                portal_name=result.get("portal_name", "TPO portal"),
-                bot_token=credentials.get("telegram_bot_token"),
-                chat_id=credentials.get("telegram_chat_id"),
-            )
         results.append({
             "user_id": user_id,
             "email": user_row["email"],
             "result": result,
-            "no_drive_notification_sent": no_drive_notification_sent,
         })
 
     return {"status": "completed", "users_checked": len(users), "results": results}
