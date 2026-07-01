@@ -98,6 +98,7 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
         )
         self._page = self._browser.new_page(
             accept_downloads=True,
+            ignore_https_errors=True,
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -105,11 +106,15 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
             ),
             viewport={"width": 1366, "height": 768},
         )
-        self._page.set_default_timeout(15000)
-        self._page.set_default_navigation_timeout(20000)
+        self._page.set_default_timeout(45000)
+        self._page.set_default_navigation_timeout(45000)
 
-        self._page.goto(self.login_url, wait_until="domcontentloaded")
-        self._page.wait_for_timeout(1500)
+        self._page.goto(self.login_url, wait_until="load")
+        try:
+            self._page.wait_for_load_state("networkidle", timeout=30000)
+        except Exception:
+            pass
+        self._wait_for_login_page_ready()
 
         username_input = self._login_input("username|email", "text,email")
         password_input = self._login_input("password", "password")
@@ -296,7 +301,7 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
             re.compile(placeholder_pattern, re.IGNORECASE)
         )
         try:
-            placeholder_input.first.wait_for(state="visible", timeout=4000)
+            placeholder_input.first.wait_for(state="visible", timeout=15000)
             return placeholder_input.first
         except Exception:
             pass
@@ -311,12 +316,14 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
             ]
         locator = page.locator(", ".join(selectors))
         try:
-            locator.first.wait_for(state="visible", timeout=8000)
+            locator.first.wait_for(state="visible", timeout=30000)
             return locator.first
         except Exception as exc:
             raise RuntimeError(
                 "VIERP login page did not expose a visible login input. "
-                f"Current URL: {page.url}. Page text: {self._body_preview(page)}"
+                f"Current URL: {page.url}. "
+                f"Title: {self._page_title(page)}. "
+                f"Page text: {self._body_preview(page)}"
             ) from exc
 
     def _login_button(self):
@@ -332,18 +339,43 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
 
         fallback = page.locator(f"{self.submit_selector}:visible, button:visible")
         try:
-            fallback.first.wait_for(state="visible", timeout=8000)
+            fallback.first.wait_for(state="visible", timeout=30000)
             return fallback.first
         except Exception as exc:
             raise RuntimeError(
                 "VIERP login page did not expose a visible login button. "
-                f"Current URL: {page.url}. Page text: {self._body_preview(page)}"
+                f"Current URL: {page.url}. "
+                f"Title: {self._page_title(page)}. "
+                f"Page text: {self._body_preview(page)}"
             ) from exc
+
+    def _wait_for_login_page_ready(self):
+        page = self._require_page()
+        try:
+            page.wait_for_function(
+                """
+                () => {
+                  const bodyText = document.body?.innerText || "";
+                  const inputs = Array.from(document.querySelectorAll("input"));
+                  return bodyText.trim().length > 0 || inputs.length > 0;
+                }
+                """,
+                timeout=45000,
+            )
+        except Exception:
+            pass
 
     @staticmethod
     def _body_preview(page) -> str:
         try:
             return re.sub(r"\s+", " ", page.locator("body").inner_text()).strip()[:500]
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _page_title(page) -> str:
+        try:
+            return page.title()
         except Exception:
             return ""
 
