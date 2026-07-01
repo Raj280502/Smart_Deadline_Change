@@ -89,36 +89,35 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
         from playwright.sync_api import sync_playwright
 
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=self.headless)
-        self._page = self._browser.new_page(accept_downloads=True)
+        self._browser = self._playwright.chromium.launch(
+            headless=self.headless,
+            args=[
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ],
+        )
+        self._page = self._browser.new_page(
+            accept_downloads=True,
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36"
+            ),
+            viewport={"width": 1366, "height": 768},
+        )
         self._page.set_default_timeout(15000)
         self._page.set_default_navigation_timeout(20000)
 
         self._page.goto(self.login_url, wait_until="domcontentloaded")
+        self._page.wait_for_timeout(1500)
 
-        username_input = self._page.get_by_placeholder(
-            re.compile("username|email", re.IGNORECASE)
-        )
-        if username_input.count() == 0:
-            username_input = self._page.locator(
-                f"{self.username_selector}, input[type='text']"
-            )
+        username_input = self._login_input("username|email", "text,email")
+        password_input = self._login_input("password", "password")
+        login_button = self._login_button()
 
-        password_input = self._page.get_by_placeholder(
-            re.compile("password", re.IGNORECASE)
-        )
-        if password_input.count() == 0:
-            password_input = self._page.locator(self.password_selector)
-
-        login_button = self._page.get_by_role(
-            "button", name=re.compile(r"^login$", re.IGNORECASE)
-        )
-        if login_button.count() == 0:
-            login_button = self._page.locator(self.submit_selector)
-
-        username_input.first.fill(self.username)
-        password_input.first.fill(self.password)
-        login_button.first.click()
+        username_input.fill(self.username)
+        password_input.fill(self.password)
+        login_button.click()
 
         try:
             self._page.wait_for_url("**/home", timeout=20000)
@@ -290,6 +289,63 @@ class MyCollegePortalAdapter(BasePlacementPortalAdapter):
         if not self._page:
             raise RuntimeError("Call login() before fetching drives.")
         return self._page
+
+    def _login_input(self, placeholder_pattern: str, input_types: str):
+        page = self._require_page()
+        placeholder_input = page.get_by_placeholder(
+            re.compile(placeholder_pattern, re.IGNORECASE)
+        )
+        try:
+            placeholder_input.first.wait_for(state="visible", timeout=4000)
+            return placeholder_input.first
+        except Exception:
+            pass
+
+        if input_types == "password":
+            selectors = ["input[type='password']:visible"]
+        else:
+            selectors = [
+                "input[type='email']:visible",
+                "input[type='text']:visible",
+                "input:not([type]):visible",
+            ]
+        locator = page.locator(", ".join(selectors))
+        try:
+            locator.first.wait_for(state="visible", timeout=8000)
+            return locator.first
+        except Exception as exc:
+            raise RuntimeError(
+                "VIERP login page did not expose a visible login input. "
+                f"Current URL: {page.url}. Page text: {self._body_preview(page)}"
+            ) from exc
+
+    def _login_button(self):
+        page = self._require_page()
+        login_button = page.get_by_role(
+            "button", name=re.compile(r"^login$", re.IGNORECASE)
+        )
+        try:
+            login_button.first.wait_for(state="visible", timeout=4000)
+            return login_button.first
+        except Exception:
+            pass
+
+        fallback = page.locator(f"{self.submit_selector}:visible, button:visible")
+        try:
+            fallback.first.wait_for(state="visible", timeout=8000)
+            return fallback.first
+        except Exception as exc:
+            raise RuntimeError(
+                "VIERP login page did not expose a visible login button. "
+                f"Current URL: {page.url}. Page text: {self._body_preview(page)}"
+            ) from exc
+
+    @staticmethod
+    def _body_preview(page) -> str:
+        try:
+            return re.sub(r"\s+", " ", page.locator("body").inner_text()).strip()[:500]
+        except Exception:
+            return ""
 
     @staticmethod
     def _text(scope, selector: str) -> Optional[str]:
